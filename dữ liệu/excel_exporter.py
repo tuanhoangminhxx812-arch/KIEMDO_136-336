@@ -255,8 +255,10 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
 
 if __name__ == "__main__":
     from data_processor import process_month_folder, analyze_discrepancy_causes
-    folder_t7 = r"d:\DATA\DATA KTTH\KIEMDO_136-336\đầu vào\tháng 7"
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    folder_t7 = os.path.join(base_dir, "đầu vào", "tháng 7")
     df_th, h_accs, p_accs, _ = process_month_folder(folder_t7)
     cm, un = analyze_discrepancy_causes(df_th, h_accs, p_accs)
-    out_file = r"d:\DATA\DATA KTTH\KIEMDO_136-336\đầu ra\Bao_Cao_Doi_Soat_136_336_Thang_7_2026.xlsx"
+    out_file = os.path.join(base_dir, "đầu ra", "Bao_Cao_Doi_Soat_136_336_Thang_7_2026.xlsx")
     export_reconciliation_excel(df_th, out_file, "Tháng 7/2026", cross_matches=cm, unmatched_by_pair=un)
+

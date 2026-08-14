@@ -82,11 +82,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Base Paths
-BASE_DIR = r"d:\DATA\DATA KTTH\KIEMDO_136-336"
+# Base Paths - Dynamic resolution for local and Streamlit Cloud environments
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if os.path.basename(CURRENT_DIR) == "dữ liệu":
+    BASE_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+else:
+    BASE_DIR = CURRENT_DIR
+
+if not os.path.exists(os.path.join(BASE_DIR, "đầu vào")):
+    if os.path.exists(os.path.join(os.getcwd(), "đầu vào")):
+        BASE_DIR = os.getcwd()
+
 INPUT_DIR = os.path.join(BASE_DIR, "đầu vào")
 DATA_DIR = os.path.join(BASE_DIR, "dữ liệu")
 OUTPUT_DIR = os.path.join(BASE_DIR, "đầu ra")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 
 # Header Section
 st.markdown("""
