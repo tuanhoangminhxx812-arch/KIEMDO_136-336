@@ -71,11 +71,17 @@ def parse_num(v):
     except:
         return 0.0
 
-def parse_account_file(fpath):
-    if not os.path.exists(fpath):
+def parse_account_file(fpath_or_stream):
+    if not fpath_or_stream:
+        return {}, []
+    if isinstance(fpath_or_stream, str) and not os.path.exists(fpath_or_stream):
         return {}, []
     
-    wb = openpyxl.load_workbook(fpath, data_only=True)
+    try:
+        wb = openpyxl.load_workbook(fpath_or_stream, data_only=True)
+    except Exception as e:
+        return {}, []
+    
     ws = wb.active
     
     accounts = {}
@@ -134,44 +140,50 @@ def parse_account_file(fpath):
                 
     return accounts, transactions
 
-def process_month_folder(folder_path):
-    def find_file(prefix, is_hcm):
-        if not os.path.exists(folder_path):
-            return ""
-        files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") and not f.startswith("~$")]
-        for f in files:
-            f_upper = f.upper()
-            if prefix in f_upper:
-                if is_hcm and "HCM" in f_upper:
-                    return os.path.join(folder_path, f)
-                elif not is_hcm and ("ĐIỆN LỰC" in f_upper or "PCVT" in f_upper or "DIEN LUC" in f_upper or "VŨNG TÀU" in f_upper or "VUNG TAU" in f_upper):
-                    return os.path.join(folder_path, f)
-        
-        # Fallbacks
-        name_hcm = f"TK {prefix} - HCM.xlsx"
-        if is_hcm and os.path.exists(os.path.join(folder_path, name_hcm)):
-            return os.path.join(folder_path, name_hcm)
-            
-        for alt in [f"TK {prefix} - Điện lực.xlsx", f"TK {prefix} - PCVT.xlsx"]:
-            if not is_hcm and os.path.exists(os.path.join(folder_path, alt)):
-                return os.path.join(folder_path, alt)
-                
-        # Last resort fallback if non-HCM file exists
-        if not is_hcm:
+def process_month_folder(folder_path, file_dict=None):
+    if file_dict:
+        f_hcm_136 = file_dict.get('hcm_136')
+        f_pcvt_136 = file_dict.get('dl_136') or file_dict.get('pcvt_136')
+        f_hcm_336 = file_dict.get('hcm_336')
+        f_pcvt_336 = file_dict.get('dl_336') or file_dict.get('pcvt_336')
+    else:
+        def find_file(prefix, is_hcm):
+            if not folder_path or not os.path.exists(folder_path):
+                return ""
+            files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") and not f.startswith("~$")]
             for f in files:
-                if prefix in f.upper() and "HCM" not in f.upper():
-                    return os.path.join(folder_path, f)
-        return ""
+                f_upper = f.upper()
+                if prefix in f_upper:
+                    if is_hcm and "HCM" in f_upper:
+                        return os.path.join(folder_path, f)
+                    elif not is_hcm and ("ĐIỆN LỰC" in f_upper or "PCVT" in f_upper or "DIEN LUC" in f_upper or "VŨNG TÀU" in f_upper or "VUNG TAU" in f_upper):
+                        return os.path.join(folder_path, f)
+            
+            # Fallbacks
+            name_hcm = f"TK {prefix} - HCM.xlsx"
+            if is_hcm and os.path.exists(os.path.join(folder_path, name_hcm)):
+                return os.path.join(folder_path, name_hcm)
+                
+            for alt in [f"TK {prefix} - Điện lực.xlsx", f"TK {prefix} - PCVT.xlsx"]:
+                if not is_hcm and os.path.exists(os.path.join(folder_path, alt)):
+                    return os.path.join(folder_path, alt)
+                    
+            if not is_hcm:
+                for f in files:
+                    if prefix in f.upper() and "HCM" not in f.upper():
+                        return os.path.join(folder_path, f)
+            return ""
 
-    f_hcm_136 = find_file("136", True)
-    f_pcvt_136 = find_file("136", False)
-    f_hcm_336 = find_file("336", True)
-    f_pcvt_336 = find_file("336", False)
+        f_hcm_136 = find_file("136", True)
+        f_pcvt_136 = find_file("136", False)
+        f_hcm_336 = find_file("336", True)
+        f_pcvt_336 = find_file("336", False)
     
     hcm_136_acc, hcm_136_tx = parse_account_file(f_hcm_136)
     pcvt_136_acc, pcvt_136_tx = parse_account_file(f_pcvt_136)
     hcm_336_acc, hcm_336_tx = parse_account_file(f_hcm_336)
     pcvt_336_acc, pcvt_336_tx = parse_account_file(f_pcvt_336)
+
 
     
     hcm_all = {**hcm_336_acc, **hcm_136_acc}
