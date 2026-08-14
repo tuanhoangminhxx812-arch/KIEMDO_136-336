@@ -164,10 +164,11 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
         
         # Helper to get remark text without markdown tags
         try:
-            from app import build_human_remark
+            from data_processor import build_human_remark
         except ImportError:
             def build_human_remark(h, p, d, hm, pm, cm):
                 return f"Chênh lệch {d:,.0f} VNĐ do chứng từ chưa hạch toán đồng bộ."
+
                 
         for pair_key, p_data in unmatched_by_pair.items():
             diff = p_data['diff']
