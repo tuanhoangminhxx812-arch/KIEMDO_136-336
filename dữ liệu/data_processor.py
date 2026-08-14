@@ -317,7 +317,8 @@ def analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs):
                 all_pcvt_txs.append({**t, 'acc': acc, 'net': net, 'matched': False})
 
     # STEP 0: INTERNAL SELF-CANCELLING WITHIN HCM AND WITHIN PCVT
-    vttb_keywords = ['VTDD', 'VTTB', 'NAM7NH', 'bán thanh lý', '3501/2026', 'PGH:', 'TBĐĐ:', 'công tơ', 'thử nghiệm', 'kiểm định', 'điện kế', 'Thí Nghiệm', 'Thuế GTGT VTĐĐ']
+    vttb_keywords = ['VTDD', 'VTTB', 'NAM7NH', 'bán thanh lý', '3501/2026', 'PGH:', 'TBĐĐ:', 'công tơ', 'thử nghiệm', 'kiểm định', 'điện kế', 'Thí Nghiệm', 'Thuế GTGT VTĐĐ', 'điều động', 'GTGT điều động']
+
 
     for acc in hcm_accs.keys():
         h_sub = [t for t in all_hcm_txs if t['acc'] == acc and not t['matched']]
