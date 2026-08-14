@@ -289,6 +289,13 @@ def analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs):
                         un_p[j]['matched'] = True
                         un_p[k]['matched'] = True
                         break
+        # Filter internal PCVT stock/inventory entries (Contract 3501, PGH, TBĐĐ, công tơ, thử nghiệm, kiểm định)
+        for t in p_sub:
+            if not t['matched']:
+                desc = t.get('desc', '')
+                if any(k in desc for k in ['bán thanh lý', '3501/2026', 'PGH:', 'TBĐĐ:', 'công tơ', 'thử nghiệm', 'kiểm định', 'điện kế']):
+                    t['matched'] = True
+
 
     # STEP 1: Pair by pair AR negative revenue collection matching
     for idx, row in diff_pairs.iterrows():
