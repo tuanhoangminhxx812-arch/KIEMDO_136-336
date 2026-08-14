@@ -234,6 +234,8 @@ def analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs):
                 all_pcvt_txs.append({**t, 'acc': acc, 'net': net, 'matched': False})
 
     # STEP 0: INTERNAL SELF-CANCELLING WITHIN HCM AND WITHIN PCVT
+    vttb_keywords = ['VTDD', 'VTTB', 'NAM7NH', 'bán thanh lý', '3501/2026', 'PGH:', 'TBĐĐ:', 'công tơ', 'thử nghiệm', 'kiểm định', 'điện kế', 'Thí Nghiệm', 'Thuế GTGT VTĐĐ']
+
     for acc in hcm_accs.keys():
         h_sub = [t for t in all_hcm_txs if t['acc'] == acc and not t['matched']]
         # 2-way internal cancel (1 vs 1)
@@ -244,23 +246,12 @@ def analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs):
                     h_sub[i]['matched'] = True
                     h_sub[j]['matched'] = True
                     break
-        # 3-way internal cancel (1 vs 2)
-        un_h = [t for t in h_sub if not t['matched']]
-        if len(un_h) >= 3 and len(un_h) <= 100:
-            pair_sums = {}
-            for j in range(len(un_h)):
-                for k in range(j+1, len(un_h)):
-                    s = round(un_h[j]['net'] + un_h[k]['net'], 2)
-                    pair_sums.setdefault(s, []).append((j, k))
-            for i in range(len(un_h)):
-                if un_h[i]['matched']: continue
-                target = -round(un_h[i]['net'], 2)
-                for j, k in pair_sums.get(target, []):
-                    if i != j and i != k and not un_h[j]['matched'] and not un_h[k]['matched']:
-                        un_h[i]['matched'] = True
-                        un_h[j]['matched'] = True
-                        un_h[k]['matched'] = True
-                        break
+        # Filter internal HCM VTTB material stock entries
+        for t in h_sub:
+            if not t['matched']:
+                desc = t.get('desc', '')
+                if any(k in desc for k in vttb_keywords):
+                    t['matched'] = True
 
     for acc in pcvt_accs.keys():
         p_sub = [t for t in all_pcvt_txs if t['acc'] == acc and not t['matched']]
@@ -289,12 +280,13 @@ def analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs):
                         un_p[j]['matched'] = True
                         un_p[k]['matched'] = True
                         break
-        # Filter internal PCVT stock/inventory entries (Contract 3501, PGH, TBĐĐ, công tơ, thử nghiệm, kiểm định)
+        # Filter internal PCVT stock/inventory entries (Contract 3501, PGH, TBĐĐ, VTDD, công tơ, thử nghiệm, kiểm định)
         for t in p_sub:
             if not t['matched']:
                 desc = t.get('desc', '')
-                if any(k in desc for k in ['bán thanh lý', '3501/2026', 'PGH:', 'TBĐĐ:', 'công tơ', 'thử nghiệm', 'kiểm định', 'điện kế']):
+                if any(k in desc for k in vttb_keywords):
                     t['matched'] = True
+
 
 
     # STEP 1: Pair by pair AR negative revenue collection matching

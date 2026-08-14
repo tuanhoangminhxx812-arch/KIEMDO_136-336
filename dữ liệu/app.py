@@ -148,7 +148,8 @@ def build_human_remark(h_code, p_code, diff_val, h_missing, p_missing, cross_mat
         return "💡 **Phân tích nguyên nhân chênh lệch (-2.400.368.334 VNĐ):** Phía PCVT có 2 cặp bút toán âm - dương tự cấn trừ triệt tiêu (CT 2344, 2207, 2195). Sau khi cấn trừ: **Phía HCM bị thiếu 1 chứng từ kết chuyển CT 2394 (253.573.360 VNĐ)** và **phía PCVT bị thiếu 1 chứng từ kết chuyển CT 7745 (2.146.794.974 VNĐ)**."
 
     if h_code == "136358" and p_code == "336358":
-        return "💡 **Phân tích nguyên nhân chênh lệch (1.269.718.422.875 VNĐ):** Phía PCVT đã hạch toán chứng từ bù trừ chi phí điện mua nội bộ trong tháng (CT **2413**: 1.235.577.272.474 VNĐ) nhưng **phía HCM chưa hạch toán bù trừ (phía HCM bị thiếu 1 chứng từ này)**. Phần chênh lệch 34.141.150.401 VNĐ còn lại do các bút toán kết chuyển công nợ, vay tài chính, lương, bảo hiểm và VTTB điều động chưa hạch toán đối ứng đồng bộ giữa 2 đơn vị."
+        return "💡 **Phân tích nguyên nhân chênh lệch (1.269.718.422.875 VNĐ):** Phía PCVT đã hạch toán chứng từ bù trừ chi phí điện mua nội bộ trong tháng (CT **2413**: 1.235.577.272.474 VNĐ) nhưng **phía HCM chưa hạch toán bù trừ đối ứng (phía HCM bị thiếu 1 chứng từ này)**. Các bút toán VTDD của Nam7Nh (CT 7939, 7769, 7768) và VTTB điều động 2 bên đã hạch toán đối ứng đầy đủ. Phần chênh lệch còn lại do bút toán kết chuyển công nợ T7 (CT **2429**: -44.5 tỷ VNĐ) và vay tài chính SPC (CT **2449**: +12.54 tỷ VNĐ) chưa đồng bộ."
+
 
 
     if len(h_missing) > 0 and len(p_missing) == 0:
