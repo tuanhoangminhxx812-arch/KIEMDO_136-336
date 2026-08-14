@@ -96,6 +96,7 @@ if not os.path.exists(os.path.join(BASE_DIR, "đầu vào")):
 INPUT_DIR = os.path.join(BASE_DIR, "đầu vào")
 DATA_DIR = os.path.join(BASE_DIR, "dữ liệu")
 OUTPUT_DIR = os.path.join(BASE_DIR, "đầu ra")
+os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -103,11 +104,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 st.markdown("""
 <div class="header-box">
     <div class="header-title">⚡ CÔNG CỤ ĐỐI SOÁT CHÊNH LỆCH TÀI KHOẢN 136 - 336</div>
-    <div class="header-subtitle">Tổng công ty Điện lực TP. HCM (080100) ⇄ Công ty Điện lực Vũng Tàu (082900)</div>
+    <div class="header-subtitle">Tổng công ty Điện lực TP. HCM (080100) ⇄ Công ty Điện lực đối ứng</div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar - Month Selection & Data Management
 st.sidebar.header("⚙️ Chọn Kỳ Số Liệu")
 
 month_folders = []
@@ -116,16 +117,62 @@ if os.path.exists(INPUT_DIR):
 month_folders.sort()
 
 selected_folder = st.sidebar.selectbox(
-    "📁 Thư Mục Số Liệu Đầu Vào:",
+    "📁 Chọn Thư Mục Kỳ Tháng:",
     options=month_folders if month_folders else ["tháng 7"],
     index=0
 )
 
 target_month_path = os.path.join(INPUT_DIR, selected_folder)
 
-if st.sidebar.button("🔄 Đọc Dữ Liệu & Làm Mới", type="primary", use_container_width=True):
+if st.sidebar.button("🔄 Làm Mới & Đọc Lại Dữ Liệu", type="primary", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
+
+st.sidebar.markdown("---")
+# Sidebar - File Upload Section for Overwriting or Adding New Month
+with st.sidebar.expander("📤 Tải Lên / Cập Nhật 4 File Số Liệu", expanded=False):
+    st.caption("Cho phép chép đè file mới hoặc tạo kỳ tháng mới trực tiếp từ giao diện web.")
+    upload_month_name = st.text_input("Tên kỳ tháng:", value=selected_folder)
+    
+    file_hcm_136 = st.file_uploader("1️⃣ TK 136 - HCM.xlsx", type=["xlsx"], key="u_hcm_136")
+    file_dl_136 = st.file_uploader("2️⃣ TK 136 - Điện lực.xlsx", type=["xlsx"], key="u_dl_136")
+    file_hcm_336 = st.file_uploader("3️⃣ TK 336 - HCM.xlsx", type=["xlsx"], key="u_hcm_336")
+    file_dl_336 = st.file_uploader("4️⃣ TK 336 - Điện lực.xlsx", type=["xlsx"], key="u_dl_336")
+    
+    if st.button("🚀 Ghi Lưu & Cập Nhật Chương Trình", type="primary", use_container_width=True):
+        if not upload_month_name.strip():
+            st.error("Vui lòng nhập tên kỳ tháng!")
+        else:
+            save_dir = os.path.join(INPUT_DIR, upload_month_name.strip())
+            os.makedirs(save_dir, exist_ok=True)
+            saved_count = 0
+            
+            if file_hcm_136:
+                with open(os.path.join(save_dir, "TK 136 - HCM.xlsx"), "wb") as f:
+                    f.write(file_hcm_136.getbuffer())
+                saved_count += 1
+                
+            if file_dl_136:
+                with open(os.path.join(save_dir, "TK 136 - Điện lực.xlsx"), "wb") as f:
+                    f.write(file_dl_136.getbuffer())
+                saved_count += 1
+                
+            if file_hcm_336:
+                with open(os.path.join(save_dir, "TK 336 - HCM.xlsx"), "wb") as f:
+                    f.write(file_hcm_336.getbuffer())
+                saved_count += 1
+                
+            if file_dl_336:
+                with open(os.path.join(save_dir, "TK 336 - Điện lực.xlsx"), "wb") as f:
+                    f.write(file_dl_336.getbuffer())
+                saved_count += 1
+                
+            if saved_count > 0:
+                st.cache_data.clear()
+                st.success(f"✅ Đã lưu {saved_count} file vào kỳ [{upload_month_name}] thành công!")
+                st.rerun()
+            else:
+                st.warning("Bạn chưa chọn file nào để tải lên.")
 
 # Currency Helper
 def format_currency(val):
@@ -139,34 +186,32 @@ def build_human_remark(h_code, p_code, diff_val, h_missing, p_missing, cross_mat
         return "✅ Hai đơn vị khớp số liệu tuyệt đối (Không có chênh lệch)."
     
     if h_code == "1363111" and p_code == "3363111":
-        return "💡 **Phân tích nguyên nhân chênh lệch (-1.372.690.826.013 VNĐ):** Phía HCM đã hạch toán 1 chứng từ CT **7796** (2.460.821.595 VNĐ) đã đối ứng với 3 chứng từ phía PCVT (CT **2123**, CT **2152** và CT **2159** tháng 05/2026). Sau khi đối ứng: **Phía HCM bị thiếu 2 chứng từ** (CT **2392** k/c doanh thu điện 1.370.572.291.416 VNĐ và CT **2159** k/c thuế GTGT tháng 03/2026 2.118.534.597 VNĐ). Phía PCVT đã hạch toán đầy đủ."
+        return "💡 **Phân tích nguyên nhân chênh lệch (-1.372.690.826.013 VNĐ):** Phía HCM đã hạch toán 1 chứng từ CT **7796** (2.460.821.595 VNĐ) đã đối ứng với 3 chứng từ phía Điện lực (CT **2123**, CT **2152** và CT **2159** tháng 05/2026). Sau khi đối ứng: **Phía HCM bị thiếu 2 chứng từ** (CT **2392** k/c doanh thu điện 1.370.572.291.416 VNĐ và CT **2159** k/c thuế GTGT tháng 03/2026 2.118.534.597 VNĐ). Phía Điện lực đã hạch toán đầy đủ."
 
     if h_code == "1363112" and p_code == "3363112":
-        return "💡 **Phân tích nguyên nhân chênh lệch (-715.006.423 VNĐ):** Phía PCVT đã hạch toán chứng từ kết chuyển doanh thu công suất phản kháng (CT **2393**). **Phía HCM chưa hạch toán đối ứng nên phía HCM bị thiếu 1 chứng từ này.**"
+        return "💡 **Phân tích nguyên nhân chênh lệch (-715.006.423 VNĐ):** Phía Điện lực đã hạch toán chứng từ kết chuyển doanh thu công suất phản kháng (CT **2393**). **Phía HCM chưa hạch toán đối ứng nên phía HCM bị thiếu 1 chứng từ này.**"
 
     if h_code == "136314" and p_code == "336314":
-        return "💡 **Phân tích nguyên nhân chênh lệch (-2.400.368.334 VNĐ):** Phía PCVT có 2 cặp bút toán âm - dương tự cấn trừ triệt tiêu (CT 2344, 2207, 2195). Sau khi cấn trừ: **Phía HCM bị thiếu 1 chứng từ kết chuyển CT 2394 (253.573.360 VNĐ)** và **phía PCVT bị thiếu 1 chứng từ kết chuyển CT 7745 (2.146.794.974 VNĐ)**."
+        return "💡 **Phân tích nguyên nhân chênh lệch (-2.400.368.334 VNĐ):** Phía Điện lực có 2 cặp bút toán âm - dương tự cấn trừ triệt tiêu (CT 2344, 2207, 2195). Sau khi cấn trừ: **Phía HCM bị thiếu 1 chứng từ kết chuyển CT 2394 (253.573.360 VNĐ)** và **phía Điện lực bị thiếu 1 chứng từ kết chuyển CT 7745 (2.146.794.974 VNĐ)**."
 
     if h_code == "136358" and p_code == "336358":
-        return "💡 **Phân tích nguyên nhân chênh lệch (1.269.718.422.875 VNĐ):** Phía PCVT đã hạch toán chứng từ bù trừ chi phí điện mua nội bộ trong tháng (CT **2413**: 1.235.577.272.474 VNĐ) nhưng **phía HCM chưa hạch toán bù trừ đối ứng (phía HCM bị thiếu 1 chứng từ này)**. Các bút toán VTDD của Nam7Nh (CT 7939, 7769, 7768) và VTTB điều động 2 bên đã hạch toán đối ứng đầy đủ. Phần chênh lệch còn lại do bút toán kết chuyển công nợ T7 (CT **2429**: -44.5 tỷ VNĐ) và vay tài chính SPC (CT **2449**: +12.54 tỷ VNĐ) chưa đồng bộ."
-
-
+        return "💡 **Phân tích nguyên nhân chênh lệch (1.269.718.422.875 VNĐ):** Phía Điện lực đã hạch toán chứng từ bù trừ chi phí điện mua nội bộ trong tháng (CT **2413**: 1.235.577.272.474 VNĐ) nhưng **phía HCM chưa hạch toán bù trừ đối ứng (phía HCM bị thiếu 1 chứng từ này)**. Các bút toán VTDD của Nam7Nh (CT 7939, 7769, 7768) và VTTB điều động 2 bên đã hạch toán đối ứng đầy đủ. Phần chênh lệch còn lại do bút toán kết chuyển công nợ T7 (CT **2429**: -44.5 tỷ VNĐ) và vay tài chính SPC (CT **2449**: +12.54 tỷ VNĐ) chưa đồng bộ."
 
     if len(h_missing) > 0 and len(p_missing) == 0:
         docs = ", ".join([str(t['gl_doc']) for t in h_missing[:3]])
-        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** PCVT đã hạch toán {len(h_missing)} chứng từ (CT GL: {docs}) nhưng **phía HCM chưa hạch toán đối ứng (phía HCM bị thiếu)**."
+        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** Điện lực đã hạch toán {len(h_missing)} chứng từ (CT GL: {docs}) nhưng **phía HCM chưa hạch toán đối ứng (phía HCM bị thiếu)**."
 
     elif len(p_missing) > 0 and len(h_missing) == 0:
         docs = ", ".join([str(t['gl_doc']) for t in p_missing[:3]])
-        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** HCM đã hạch toán {len(p_missing)} chứng từ (CT GL: {docs}) nhưng **phía PCVT chưa hạch toán đối ứng (phía PCVT bị thiếu)**."
+        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** HCM đã hạch toán {len(p_missing)} chứng từ (CT GL: {docs}) nhưng **phía Điện lực chưa hạch toán đối ứng (phía Điện lực bị thiếu)**."
 
     elif len(h_missing) > 0 and len(p_missing) > 0:
-        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** Sau khi tự cấn trừ và ghép đối ứng tập chứng từ, phía HCM bị thiếu {len(h_missing)} chứng từ và phía PCVT bị thiếu {len(p_missing)} chứng từ chưa hạch toán đối ứng đồng bộ."
+        return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** Sau khi tự cấn trừ và ghép đối ứng tập chứng từ, phía HCM bị thiếu {len(h_missing)} chứng từ và phía Điện lực bị thiếu {len(p_missing)} chứng từ chưa hạch toán đối ứng đồng bộ."
 
     cm_items = [c for c in cross_matches if (c['hcm_acc'] == h_code or c['pcvt_acc'] == p_code)]
     if cm_items:
         c = cm_items[0]
-        return f"💡 **Phân tích nguyên nhân chênh lệch:** Hạch toán lệch tài khoản đối ứng (HCM ghi TK {c['hcm_acc']}, PCVT ghi TK {c['pcvt_acc']} số tiền {format_currency(c['net'])} VNĐ)."
+        return f"💡 **Phân tích nguyên nhân chênh lệch:** Hạch toán lệch tài khoản đối ứng (HCM ghi TK {c['hcm_acc']}, Điện lực ghi TK {c['pcvt_acc']} số tiền {format_currency(c['net'])} VNĐ)."
 
     return f"💡 **Phân tích nguyên nhân chênh lệch ({format_currency(diff_val)} VNĐ):** Chênh lệch phát sinh do chứng từ chưa hạch toán đồng bộ giữa 2 đơn vị."
 
@@ -184,7 +229,7 @@ if hasattr(st, "dialog"):
         h_missing = pair_data['hcm_missing']
         p_missing = pair_data['pcvt_missing']
         
-        st.markdown(f"### 🎯 Cặp Tài Khoản: **{h_code} (HCM) ⇄ {p_code} (PCVT)**")
+        st.markdown(f"### 🎯 Cặp Tài Khoản: **{h_code} (HCM) ⇄ {p_code} (Điện lực)**")
         st.markdown(f"**Chênh lệch cuối kỳ:** <span style='color: #DC3545; font-weight: 700; font-size: 18px;'>{format_currency(diff_val)} VNĐ</span>", unsafe_allow_html=True)
         
         st.markdown(f"""
@@ -207,7 +252,7 @@ if hasattr(st, "dialog"):
                 st.success("✅ Phía HCM đã hạch toán đầy đủ.")
                 
         with col_un_p:
-            st.markdown(f"#### 🏢 Bút Toán PCVT Bị Thiếu ({len(p_missing)} chứng từ)")
+            st.markdown(f"#### 🏢 Bút Toán Điện Lực Bị Thiếu ({len(p_missing)} chứng từ)")
             if p_missing:
                 df_un_p = pd.DataFrame(p_missing)[['date', 'gl_doc', 'net', 'desc', 'creator']].copy()
                 df_un_p['Số Tiền (VNĐ)'] = df_un_p['net'].apply(format_currency)
@@ -215,7 +260,7 @@ if hasattr(st, "dialog"):
                 df_un_p.columns = ['Ngày CT', 'Số CT GL', 'Số Tiền (VNĐ)', 'Diễn Giải', 'Người Lập']
                 st.dataframe(df_un_p, use_container_width=True, hide_index=True)
             else:
-                st.success("✅ Phía PCVT đã hạch toán đầy đủ.")
+                st.success("✅ Phía Điện lực đã hạch toán đầy đủ.")
                 
         st.markdown("---")
         if st.button("❌ Đóng Màn Hình Chi Tiết", type="primary", use_container_width=True):
@@ -243,7 +288,7 @@ if os.path.exists(target_month_path):
     with c2:
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-title">Tổng Dư Có (PCVT)</div>
+            <div class="kpi-title">Tổng Dư Có (Điện lực)</div>
             <div class="kpi-value">{format_currency(tot_co)}</div>
         </div>
         """, unsafe_allow_html=True)
@@ -282,7 +327,7 @@ if os.path.exists(target_month_path):
             horizontal=True
         )
 
-        # Prepare report rows with standard 4 components requested
+        # Prepare report rows
         report_data = []
         for idx, row in df_th.iterrows():
             h_acc = row['HCM']
@@ -322,7 +367,7 @@ if os.path.exists(target_month_path):
         with col_pair: st.markdown("**Cặp Tài Khoản**")
         with col_diff: st.markdown("**Chênh Lệch (VNĐ)**")
         with col_h: st.markdown("**Bút Toán HCM**")
-        with col_p: st.markdown("**Bút Toán PCVT**")
+        with col_p: st.markdown("**Bút Toán Điện Lực**")
         with col_action: st.markdown("**Thao Tác**")
         st.markdown("---")
 
@@ -340,7 +385,6 @@ if os.path.exists(target_month_path):
                 
             with c_diff:
                 if is_diff:
-                    # Clickable button styled as amount
                     if st.button(f"🔴 {diff_fmt} VNĐ", key=f"btn_diff_{r['stt']}", type="secondary", help="Click để xem chi tiết chứng từ chênh lệch"):
                         remark_text = build_human_remark(
                             r['h_acc'], r['p_acc'], r['diff'], 
@@ -404,7 +448,7 @@ if os.path.exists(target_month_path):
                         df_un_h.columns = ['Ngày CT', 'Số CT GL', 'Số Tiền (VNĐ)', 'Diễn Giải', 'Người Lập']
                         st.dataframe(df_un_h, use_container_width=True, hide_index=True)
                 with col_un_p:
-                    st.markdown(f"#### 🏢 Bút Toán PCVT Bị Thiếu ({len(p_data['pcvt_missing'])} CT)")
+                    st.markdown(f"#### 🏢 Bút Toán Điện Lực Bị Thiếu ({len(p_data['pcvt_missing'])} CT)")
                     if p_data['pcvt_missing']:
                         df_un_p = pd.DataFrame(p_data['pcvt_missing'])[['date', 'gl_doc', 'net', 'desc', 'creator']].copy()
                         df_un_p['Số Tiền (VNĐ)'] = df_un_p['net'].apply(format_currency)
@@ -463,7 +507,7 @@ if os.path.exists(target_month_path):
                     st.success("✅ Phía HCM đã hạch toán đầy đủ, không bị thiếu chứng từ nào.")
                     
             with col_un_p:
-                st.markdown(f"#### 🏢 Bút Toán Phía PCVT Chưa Hạch Toán (PCVT Bị Thiếu) — {len(p_missing)} chứng từ")
+                st.markdown(f"#### 🏢 Bút Toán Phía Điện Lực Chưa Hạch Toán (Điện Lực Bị Thiếu) — {len(p_missing)} chứng từ")
                 if p_missing:
                     df_un_p = pd.DataFrame(p_missing)[['date', 'gl_doc', 'net', 'desc', 'creator']].copy()
                     df_un_p['Số Tiền (VNĐ)'] = df_un_p['net'].apply(format_currency)
@@ -471,7 +515,7 @@ if os.path.exists(target_month_path):
                     df_un_p.columns = ['Ngày CT', 'Số CT GL', 'Số Tiền (VNĐ)', 'Diễn Giải', 'Người Lập']
                     st.dataframe(df_un_p, use_container_width=True, hide_index=True)
                 else:
-                    st.success("✅ Phía PCVT đã hạch toán đầy đủ, không bị thiếu chứng từ nào.")
+                    st.success("✅ Phía Điện lực đã hạch toán đầy đủ, không bị thiếu chứng từ nào.")
 
     # -------------------------------------------------------------
     # TAB 3: EXPORT EXCEL

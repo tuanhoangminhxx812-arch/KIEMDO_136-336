@@ -58,7 +58,7 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
     ws["E1"].alignment = align_center
     
     # Table Header Row 2
-    headers = ["HCM", "PCVT", "Nợ", "Có", "CHÊNH LỆCH"]
+    headers = ["HCM", "Điện lực", "Nợ", "Có", "CHÊNH LỆCH"]
     for col_idx, h in enumerate(headers, 1):
         cell = ws.cell(row=2, column=col_idx, value=h)
         cell.font = font_header
@@ -145,7 +145,7 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
         
         # Section 1: Misclassifications
         ws_an.cell(row=4, column=1, value="1. DANH SÁCH BÚT TOÁN HẠCH TOÁN LỆCH TÀI KHOẢN ĐỐI ỨNG").font = font_bold
-        cm_headers = ["STT", "Ngày CT", "TK HCM", "TK PCVT", "Số Tiền Lệch TK", "Diễn Giải (HCM)", "Diễn Giải (PCVT)"]
+        cm_headers = ["STT", "Ngày CT", "TK HCM", "TK Điện lực", "Số Tiền Lệch TK", "Diễn Giải (HCM)", "Diễn Giải (Điện lực)"]
         for c_i, h in enumerate(cm_headers, 1):
             cell = ws_an.cell(row=5, column=c_i, value=h)
             cell.font = font_header
@@ -180,7 +180,7 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
         ws_an.cell(row=row_cur, column=1, value="2. DANH SÁCH BÚT TOÁN KHUYẾT BỊ LỆCH THEO TỪNG CẶP TÀI KHOẢN").font = font_bold
         row_cur += 1
         
-        un_headers = ["TK HCM", "TK PCVT", "Số Tiền Lệch Cặp", "Đơn Vị Khuyết", "Ngày CT", "Số CT GL", "Số Tiền Bút Toán", "Diễn Giải Bút Toán", "Người Lập"]
+        un_headers = ["TK HCM", "TK Điện lực", "Số Tiền Lệch Cặp", "Đơn Vị Khuyết", "Ngày CT", "Số CT GL", "Số Tiền Bút Toán", "Diễn Giải Bút Toán", "Người Lập"]
         for c_i, h in enumerate(un_headers, 1):
             cell = ws_an.cell(row=row_cur, column=c_i, value=h)
             cell.font = font_header
@@ -202,7 +202,7 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
                     c_d.alignment = align_center
                     c_d.font = font_diff
                     
-                    ws_an.cell(row=row_cur, column=4, value="Chỉ có tại HCM (Khuyết PCVT)").alignment = align_center
+                    ws_an.cell(row=row_cur, column=4, value="Chỉ có tại HCM (Khuyết Điện lực)").alignment = align_center
                     ws_an.cell(row=row_cur, column=5, value=str(u['date'])[:10]).alignment = align_center
                     ws_an.cell(row=row_cur, column=6, value=str(u['gl_doc'])).alignment = align_center
                     
@@ -226,7 +226,8 @@ def export_reconciliation_excel(df_tong_hop, output_filepath, period_text="Thán
                     c_d.alignment = align_center
                     c_d.font = font_diff
                     
-                    ws_an.cell(row=row_cur, column=4, value="Chỉ có tại PCVT (Khuyết HCM)").alignment = align_center
+                    ws_an.cell(row=row_cur, column=4, value="Chỉ có tại Điện lực (Khuyết HCM)").alignment = align_center
+
                     ws_an.cell(row=row_cur, column=5, value=str(u['date'])[:10]).alignment = align_center
                     ws_an.cell(row=row_cur, column=6, value=str(u['gl_doc'])).alignment = align_center
                     

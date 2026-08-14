@@ -135,15 +135,44 @@ def parse_account_file(fpath):
     return accounts, transactions
 
 def process_month_folder(folder_path):
-    f_hcm_136 = os.path.join(folder_path, "TK 136 - HCM.xlsx")
-    f_pcvt_136 = os.path.join(folder_path, "TK 136 - PCVT.xlsx")
-    f_hcm_336 = os.path.join(folder_path, "TK 336 - HCM.xlsx")
-    f_pcvt_336 = os.path.join(folder_path, "TK 336 - PCVT.xlsx")
+    def find_file(prefix, is_hcm):
+        if not os.path.exists(folder_path):
+            return ""
+        files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") and not f.startswith("~$")]
+        for f in files:
+            f_upper = f.upper()
+            if prefix in f_upper:
+                if is_hcm and "HCM" in f_upper:
+                    return os.path.join(folder_path, f)
+                elif not is_hcm and ("ĐIỆN LỰC" in f_upper or "PCVT" in f_upper or "DIEN LUC" in f_upper or "VŨNG TÀU" in f_upper or "VUNG TAU" in f_upper):
+                    return os.path.join(folder_path, f)
+        
+        # Fallbacks
+        name_hcm = f"TK {prefix} - HCM.xlsx"
+        if is_hcm and os.path.exists(os.path.join(folder_path, name_hcm)):
+            return os.path.join(folder_path, name_hcm)
+            
+        for alt in [f"TK {prefix} - Điện lực.xlsx", f"TK {prefix} - PCVT.xlsx"]:
+            if not is_hcm and os.path.exists(os.path.join(folder_path, alt)):
+                return os.path.join(folder_path, alt)
+                
+        # Last resort fallback if non-HCM file exists
+        if not is_hcm:
+            for f in files:
+                if prefix in f.upper() and "HCM" not in f.upper():
+                    return os.path.join(folder_path, f)
+        return ""
+
+    f_hcm_136 = find_file("136", True)
+    f_pcvt_136 = find_file("136", False)
+    f_hcm_336 = find_file("336", True)
+    f_pcvt_336 = find_file("336", False)
     
     hcm_136_acc, hcm_136_tx = parse_account_file(f_hcm_136)
     pcvt_136_acc, pcvt_136_tx = parse_account_file(f_pcvt_136)
     hcm_336_acc, hcm_336_tx = parse_account_file(f_hcm_336)
     pcvt_336_acc, pcvt_336_tx = parse_account_file(f_pcvt_336)
+
     
     hcm_all = {**hcm_336_acc, **hcm_136_acc}
     pcvt_all = {**pcvt_136_acc, **pcvt_336_acc}
