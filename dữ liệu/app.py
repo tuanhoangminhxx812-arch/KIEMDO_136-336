@@ -238,13 +238,17 @@ with st.sidebar.expander("📤 Tải Lên / Cập Nhật File Thông Minh", expa
             detected_files[chosen_role] = uf
             
         ready_count = len(detected_files)
+        has_main_pair = ("hcm_136" in detected_files and "dl_336" in detected_files)
+        
         if ready_count == 4:
             st.success("🎉 Đã đủ 4/4 file cho cả 4 vai trò!")
+        elif has_main_pair:
+            st.info(f"💡 Đã nhận diện {ready_count}/4 file — Đã có đủ cặp đối soát chủ lực: **TK 136 (HCM) ⇄ TK 336 (Điện lực)**. Anh có thể bấm đối soát ngay bây giờ!")
         else:
             missing_roles = [role_options[r] for r in ["hcm_136", "dl_136", "hcm_336", "dl_336"] if r not in detected_files]
             st.warning(f"Đã nhận diện {ready_count}/4 vai trò. Còn thiếu: {', '.join(missing_roles)}")
             
-        if st.button("⚡ Đối Soát Trực Tiếp Dữ Liệu Vừa Tải", type="primary", use_container_width=True, disabled=(ready_count < 4)):
+        if st.button("⚡ Đối Soát Trực Tiếp Dữ Liệu Vừa Tải", type="primary", use_container_width=True, disabled=(ready_count < 2)):
             st.session_state["active_source"] = "uploaded"
             st.session_state["uploaded_dict"] = detected_files
             st.cache_data.clear()
