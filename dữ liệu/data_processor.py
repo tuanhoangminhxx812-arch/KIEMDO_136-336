@@ -3,6 +3,128 @@ import xlrd
 import pandas as pd
 import os
 import re
+import io
+
+def read_header_cells(fpath_or_stream, filename=""):
+    """Reads first 20 rows of cell values into text blocks for smart recognition."""
+    text_blocks = []
+    r1_text = ""
+    r2_text = ""
+    r3_text = ""
+    
+    is_stream = not isinstance(fpath_or_stream, str)
+    stream_bytes = None
+    if is_stream:
+        stream_bytes = fpath_or_stream.read()
+        fpath_or_stream.seek(0)
+    
+    is_xlsx = True
+    if is_stream:
+        if stream_bytes and stream_bytes[:4] == b'\xd0\xcf\x11\xe0':
+            is_xlsx = False
+    else:
+        if str(fpath_or_stream).lower().endswith('.xls'):
+            is_xlsx = False
+            
+    if is_xlsx:
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(stream_bytes) if is_stream else fpath_or_stream, data_only=True, read_only=True)
+            ws = wb.active
+            for r in range(1, 20):
+                row_vals = []
+                for c in range(1, 10):
+                    val = ws.cell(r, c).value
+                    if val is not None and str(val).strip():
+                        row_vals.append(str(val).strip())
+                if row_vals:
+                    text_blocks.append(" ".join(row_vals))
+                if r == 1 and row_vals: r1_text = " ".join(row_vals)
+                if r == 2 and row_vals: r2_text = " ".join(row_vals)
+                if r == 3 and row_vals: r3_text = " ".join(row_vals)
+            wb.close()
+        except Exception:
+            is_xlsx = False
+            
+    if not is_xlsx:
+        try:
+            if is_stream:
+                wb = xlrd.open_workbook(file_contents=stream_bytes)
+            else:
+                wb = xlrd.open_workbook(fpath_or_stream)
+            ws = wb.sheet_by_index(0)
+            for r in range(min(20, ws.nrows)):
+                row_vals = []
+                for c in range(min(10, ws.ncols)):
+                    val = ws.cell_value(r, c)
+                    if val != "" and str(val).strip():
+                        row_vals.append(str(val).strip())
+                if row_vals:
+                    text_blocks.append(" ".join(row_vals))
+                if r == 0 and row_vals: r1_text = " ".join(row_vals)
+                if r == 1 and row_vals: r2_text = " ".join(row_vals)
+                if r == 2 and row_vals: r3_text = " ".join(row_vals)
+        except Exception:
+            pass
+            
+    return r1_text, r2_text, r3_text, " \n ".join(text_blocks)
+
+def smart_classify_file(fpath_or_stream, orig_filename=""):
+    """
+    Intelligently identifies any uploaded or folder file:
+    Inspects internal Excel content first (headers, accounts, branches),
+    and falls back to filenames.
+    Returns: (role, acc, entity, label)
+      - role: 'hcm_136', 'dl_136', 'hcm_336', 'dl_336' (or None)
+      - acc: '136' or '336'
+      - entity: 'hcm' or 'dl'
+      - label: human-readable name
+    """
+    fname = (orig_filename or (os.path.basename(fpath_or_stream) if isinstance(fpath_or_stream, str) else "")).upper()
+    r1, r2, r3, full_text = read_header_cells(fpath_or_stream, fname)
+    full_upper = full_text.upper()
+    header_upper = f"{r1} {r2} {r3}".upper()
+    
+    # 1. Determine Account (136 vs 336)
+    acc = None
+    if "136 - PHẢI THU" in full_upper or "TÀI KHOẢN: 136" in full_upper or "TK: 136" in full_upper:
+        acc = "136"
+    elif "336 - PHẢI TRẢ" in full_upper or "TÀI KHOẢN: 336" in full_upper or "TK: 336" in full_upper:
+        acc = "336"
+    elif re.search(r'\b136\d{4}\b', full_upper):
+        acc = "136"
+    elif re.search(r'\b336\d{4}\b', full_upper):
+        acc = "336"
+    elif "136" in fname and "336" not in fname:
+        acc = "136"
+    elif "336" in fname and "136" not in fname:
+        acc = "336"
+        
+    # 2. Determine Entity (HCM vs Điện lực)
+    entity = None
+    is_ktn = ("KẾ TOÁN NGÀNH" in header_upper or "KE TOAN NGANH" in header_upper or "KTN" in header_upper)
+    has_tap_doan = ("TẬP ĐOÀN ĐIỆN LỰC" in header_upper or "TAP DOAN DIEN LUC" in header_upper)
+    has_chi_nhanh = ("CHI NHÁNH" in header_upper or "CHI NHANH" in header_upper)
+    has_cong_ty_dl = ("CÔNG TY ĐIỆN LỰC" in r2.upper() or "CONG TY DIEN LUC" in r2.upper() or "PCVT" in full_upper or "VŨNG TÀU" in header_upper or "VUNG TAU" in header_upper)
+
+    if (is_ktn or has_tap_doan) and not has_chi_nhanh:
+        entity = "hcm"
+    elif has_chi_nhanh or has_cong_ty_dl:
+        entity = "dl"
+    else:
+        # Fallback to filename
+        if any(k in fname for k in ["HCM", "TCT", "KTN", "HO CHI MINH", "HCMC"]):
+            entity = "hcm"
+        elif any(k in fname for k in ["ĐIỆN LỰC", "DIEN LUC", "PCVT", "VŨNG TÀU", "VUNG TAU", "CHI NHÁNH", "CHI NHANH", "DL", "PC"]):
+            entity = "dl"
+
+    role = None
+    label = "Chưa xác định"
+    if entity and acc:
+        role = f"{entity}_{acc}"
+        ent_desc = "HCM (Tổng công ty)" if entity == "hcm" else "Điện lực (Chi nhánh)"
+        label = f"TK {acc} - {ent_desc}"
+        
+    return role, acc, entity, label
 
 # Standard 52 pair definitions as defined in sheet TONG_HOP of Tool ERP reference file
 STANDARD_PAIRS = [
@@ -119,107 +241,198 @@ def parse_account_file(fpath_or_stream):
     if isinstance(fpath_or_stream, str) and not os.path.exists(fpath_or_stream):
         return {}, []
     
-    try:
-        wb = openpyxl.load_workbook(fpath_or_stream, data_only=True)
-    except Exception as e:
-        return {}, []
-    
-    ws = wb.active
-    
+    is_stream = not isinstance(fpath_or_stream, str)
+    stream_bytes = None
+    if is_stream:
+        stream_bytes = fpath_or_stream.read()
+        fpath_or_stream.seek(0)
+
+    is_xls = False
+    if is_stream:
+        if stream_bytes and stream_bytes[:4] == b'\xd0\xcf\x11\xe0':
+            is_xls = True
+    elif isinstance(fpath_or_stream, str) and str(fpath_or_stream).lower().endswith('.xls'):
+        is_xls = True
+        
     accounts = {}
     transactions = []
     current_acc = None
-    
-    for r in range(1, ws.max_row + 1):
-        c1 = ws.cell(r, 1).value
-        
-        if c1 and str(c1).startswith("Tài khoản:"):
-            acc_str = str(c1).replace("Tài khoản:", "").strip()
-            code_match = re.match(r'^(\d+)', acc_str)
-            if code_match:
-                current_acc = code_match.group(1)
-                accounts[current_acc] = {
-                    'code': current_acc,
-                    'title': acc_str,
-                    'open_no': 0.0, 'open_co': 0.0,
-                    'ps_no': 0.0, 'ps_co': 0.0,
-                    'close_no': 0.0, 'close_co': 0.0,
-                    'sub_records': []
-                }
-        elif current_acc:
-            c1_str = str(c1) if c1 is not None else ""
-            if "Số dư đầu kỳ" in c1_str:
-                accounts[current_acc]['open_no'] = parse_num(ws.cell(r, 6).value)
-                accounts[current_acc]['open_co'] = parse_num(ws.cell(r, 7).value)
-            elif "Cộng phát sinh" in c1_str:
-                accounts[current_acc]['ps_no'] = parse_num(ws.cell(r, 6).value)
-                accounts[current_acc]['ps_co'] = parse_num(ws.cell(r, 7).value)
-            elif "Số dư cuối kỳ" in c1_str:
-                accounts[current_acc]['close_no'] = parse_num(ws.cell(r, 6).value)
-                accounts[current_acc]['close_co'] = parse_num(ws.cell(r, 7).value)
-            elif c1 and not c1_str.startswith("Khối:") and not c1_str.startswith("TỔNG") and not c1_str.startswith("CHI NHÁNH") and not c1_str.startswith("Nguồn bút toán") and not c1_str.startswith("SỔ CHI TIẾT") and not c1_str.startswith("Từ ngày:"):
-                tx_date = ws.cell(r, 2).value
-                tx_sub_doc = ws.cell(r, 3).value
-                tx_gl_doc = ws.cell(r, 4).value
-                tx_desc = ws.cell(r, 5).value
-                tx_no = parse_num(ws.cell(r, 6).value)
-                tx_co = parse_num(ws.cell(r, 7).value)
-                tx_creator = ws.cell(r, 9).value if ws.max_column >= 9 else ws.cell(r, 8).value
-                
-                tx_rec = {
-                    'account': current_acc,
-                    'source': c1,
-                    'date': str(tx_date) if tx_date else '',
-                    'sub_doc': str(tx_sub_doc) if tx_sub_doc else '',
-                    'gl_doc': str(tx_gl_doc) if tx_gl_doc else '',
-                    'desc': str(tx_desc) if tx_desc else '',
-                    'ps_no': tx_no,
-                    'ps_co': tx_co,
-                    'creator': str(tx_creator) if tx_creator else ''
-                }
-                transactions.append(tx_rec)
-                accounts[current_acc]['sub_records'].append(tx_rec)
-                
+
+    if not is_xls:
+        try:
+            target = io.BytesIO(stream_bytes) if is_stream else fpath_or_stream
+            wb = openpyxl.load_workbook(target, data_only=True)
+            ws = wb.active
+            for r in range(1, ws.max_row + 1):
+                c1 = ws.cell(r, 1).value
+                if c1 and str(c1).startswith("Tài khoản:"):
+                    acc_str = str(c1).replace("Tài khoản:", "").strip()
+                    code_match = re.match(r'^(\d+)', acc_str)
+                    if code_match:
+                        current_acc = code_match.group(1)
+                        accounts[current_acc] = {
+                            'code': current_acc, 'title': acc_str,
+                            'open_no': 0.0, 'open_co': 0.0,
+                            'ps_no': 0.0, 'ps_co': 0.0,
+                            'close_no': 0.0, 'close_co': 0.0,
+                            'sub_records': []
+                        }
+                elif current_acc:
+                    c1_str = str(c1) if c1 is not None else ""
+                    if "Số dư đầu kỳ" in c1_str:
+                        accounts[current_acc]['open_no'] = parse_num(ws.cell(r, 6).value)
+                        accounts[current_acc]['open_co'] = parse_num(ws.cell(r, 7).value)
+                    elif "Cộng phát sinh" in c1_str:
+                        accounts[current_acc]['ps_no'] = parse_num(ws.cell(r, 6).value)
+                        accounts[current_acc]['ps_co'] = parse_num(ws.cell(r, 7).value)
+                    elif "Số dư cuối kỳ" in c1_str:
+                        accounts[current_acc]['close_no'] = parse_num(ws.cell(r, 6).value)
+                        accounts[current_acc]['close_co'] = parse_num(ws.cell(r, 7).value)
+                    elif c1 and not c1_str.startswith("Khối:") and not c1_str.startswith("TỔNG") and not c1_str.startswith("CHI NHÁNH") and not c1_str.startswith("Nguồn bút toán") and not c1_str.startswith("SỔ CHI TIẾT") and not c1_str.startswith("Từ ngày:"):
+                        tx_date = ws.cell(r, 2).value
+                        tx_sub_doc = ws.cell(r, 3).value
+                        tx_gl_doc = ws.cell(r, 4).value
+                        tx_desc = ws.cell(r, 5).value
+                        tx_no = parse_num(ws.cell(r, 6).value)
+                        tx_co = parse_num(ws.cell(r, 7).value)
+                        tx_creator = ws.cell(r, 9).value if ws.max_column >= 9 else ws.cell(r, 8).value
+                        
+                        tx_rec = {
+                            'account': current_acc,
+                            'source': c1,
+                            'date': str(tx_date) if tx_date else '',
+                            'sub_doc': str(tx_sub_doc) if tx_sub_doc else '',
+                            'gl_doc': str(tx_gl_doc) if tx_gl_doc else '',
+                            'desc': str(tx_desc) if tx_desc else '',
+                            'ps_no': tx_no,
+                            'ps_co': tx_co,
+                            'creator': str(tx_creator) if tx_creator else ''
+                        }
+                        transactions.append(tx_rec)
+                        accounts[current_acc]['sub_records'].append(tx_rec)
+            return accounts, transactions
+        except Exception:
+            is_xls = True
+
+    if is_xls:
+        try:
+            if is_stream:
+                wb = xlrd.open_workbook(file_contents=stream_bytes)
+            else:
+                wb = xlrd.open_workbook(fpath_or_stream)
+            ws = wb.sheet_by_index(0)
+            for r in range(ws.nrows):
+                c1 = ws.cell_value(r, 0)
+                if c1 and str(c1).startswith("Tài khoản:"):
+                    acc_str = str(c1).replace("Tài khoản:", "").strip()
+                    code_match = re.match(r'^(\d+)', acc_str)
+                    if code_match:
+                        current_acc = code_match.group(1)
+                        accounts[current_acc] = {
+                            'code': current_acc, 'title': acc_str,
+                            'open_no': 0.0, 'open_co': 0.0,
+                            'ps_no': 0.0, 'ps_co': 0.0,
+                            'close_no': 0.0, 'close_co': 0.0,
+                            'sub_records': []
+                        }
+                elif current_acc:
+                    c1_str = str(c1) if c1 is not None else ""
+                    if "Số dư đầu kỳ" in c1_str:
+                        accounts[current_acc]['open_no'] = parse_num(ws.cell_value(r, 5) if ws.ncols > 5 else 0)
+                        accounts[current_acc]['open_co'] = parse_num(ws.cell_value(r, 6) if ws.ncols > 6 else 0)
+                    elif "Cộng phát sinh" in c1_str:
+                        accounts[current_acc]['ps_no'] = parse_num(ws.cell_value(r, 5) if ws.ncols > 5 else 0)
+                        accounts[current_acc]['ps_co'] = parse_num(ws.cell_value(r, 6) if ws.ncols > 6 else 0)
+                    elif "Số dư cuối kỳ" in c1_str:
+                        accounts[current_acc]['close_no'] = parse_num(ws.cell_value(r, 5) if ws.ncols > 5 else 0)
+                        accounts[current_acc]['close_co'] = parse_num(ws.cell_value(r, 6) if ws.ncols > 6 else 0)
+                    elif c1 and not c1_str.startswith("Khối:") and not c1_str.startswith("TỔNG") and not c1_str.startswith("CHI NHÁNH") and not c1_str.startswith("Nguồn bút toán") and not c1_str.startswith("SỔ CHI TIẾT") and not c1_str.startswith("Từ ngày:"):
+                        tx_date = ws.cell_value(r, 1) if ws.ncols > 1 else ''
+                        tx_sub_doc = ws.cell_value(r, 2) if ws.ncols > 2 else ''
+                        tx_gl_doc = ws.cell_value(r, 3) if ws.ncols > 3 else ''
+                        tx_desc = ws.cell_value(r, 4) if ws.ncols > 4 else ''
+                        tx_no = parse_num(ws.cell_value(r, 5) if ws.ncols > 5 else 0)
+                        tx_co = parse_num(ws.cell_value(r, 6) if ws.ncols > 6 else 0)
+                        tx_creator = ws.cell_value(r, 8) if ws.ncols >= 9 else (ws.cell_value(r, 7) if ws.ncols >= 8 else '')
+                        
+                        tx_rec = {
+                            'account': current_acc,
+                            'source': c1,
+                            'date': str(tx_date) if tx_date else '',
+                            'sub_doc': str(tx_sub_doc) if tx_sub_doc else '',
+                            'gl_doc': str(tx_gl_doc) if tx_gl_doc else '',
+                            'desc': str(tx_desc) if tx_desc else '',
+                            'ps_no': tx_no,
+                            'ps_co': tx_co,
+                            'creator': str(tx_creator) if tx_creator else ''
+                        }
+                        transactions.append(tx_rec)
+                        accounts[current_acc]['sub_records'].append(tx_rec)
+            return accounts, transactions
+        except Exception:
+            return {}, []
+
     return accounts, transactions
 
-def process_month_folder(folder_path, file_dict=None):
+def process_month_folder(folder_path=None, file_dict=None):
     if file_dict:
         f_hcm_136 = file_dict.get('hcm_136')
         f_pcvt_136 = file_dict.get('dl_136') or file_dict.get('pcvt_136')
         f_hcm_336 = file_dict.get('hcm_336')
         f_pcvt_336 = file_dict.get('dl_336') or file_dict.get('pcvt_336')
     else:
-        def find_file(prefix, is_hcm):
-            if not folder_path or not os.path.exists(folder_path):
-                return ""
-            files = [f for f in os.listdir(folder_path) if f.endswith(".xlsx") and not f.startswith("~$")]
-            for f in files:
-                f_upper = f.upper()
-                if prefix in f_upper:
-                    if is_hcm and "HCM" in f_upper:
-                        return os.path.join(folder_path, f)
-                    elif not is_hcm and ("ĐIỆN LỰC" in f_upper or "PCVT" in f_upper or "DIEN LUC" in f_upper or "VŨNG TÀU" in f_upper or "VUNG TAU" in f_upper):
-                        return os.path.join(folder_path, f)
+        f_hcm_136 = ""
+        f_pcvt_136 = ""
+        f_hcm_336 = ""
+        f_pcvt_336 = ""
+        
+        if folder_path and os.path.exists(folder_path):
+            excel_files = [
+                f for f in os.listdir(folder_path)
+                if (f.lower().endswith('.xlsx') or f.lower().endswith('.xls')) and not f.startswith('~$')
+            ]
             
-            # Fallbacks
-            name_hcm = f"TK {prefix} - HCM.xlsx"
-            if is_hcm and os.path.exists(os.path.join(folder_path, name_hcm)):
-                return os.path.join(folder_path, name_hcm)
-                
-            for alt in [f"TK {prefix} - Điện lực.xlsx", f"TK {prefix} - PCVT.xlsx"]:
-                if not is_hcm and os.path.exists(os.path.join(folder_path, alt)):
-                    return os.path.join(folder_path, alt)
+            # Step 1: Run smart classify on all files in directory
+            classified = {}
+            unclassified = []
+            for f in excel_files:
+                full_p = os.path.join(folder_path, f)
+                role, acc, ent, label = smart_classify_file(full_p, f)
+                if role and role not in classified:
+                    classified[role] = full_p
+                else:
+                    unclassified.append((full_p, f, acc, ent))
                     
-            if not is_hcm:
-                for f in files:
-                    if prefix in f.upper() and "HCM" not in f.upper():
-                        return os.path.join(folder_path, f)
-            return ""
+            f_hcm_136 = classified.get('hcm_136', '')
+            f_pcvt_136 = classified.get('dl_136', '')
+            f_hcm_336 = classified.get('hcm_336', '')
+            f_pcvt_336 = classified.get('dl_336', '')
+            
+            # Step 2: Auto-resolve from unclassified files if any role missing
+            for p, f, acc, ent in unclassified:
+                if acc == "136":
+                    if not f_hcm_136 and ent == "hcm": f_hcm_136 = p
+                    elif not f_pcvt_136 and ent == "dl": f_pcvt_136 = p
+                    elif not f_hcm_136 and f_pcvt_136: f_hcm_136 = p
+                    elif not f_pcvt_136 and f_hcm_136: f_pcvt_136 = p
+                elif acc == "336":
+                    if not f_hcm_336 and ent == "hcm": f_hcm_336 = p
+                    elif not f_pcvt_336 and ent == "dl": f_pcvt_336 = p
+                    elif not f_hcm_336 and f_pcvt_336: f_hcm_336 = p
+                    elif not f_pcvt_336 and f_hcm_336: f_pcvt_336 = p
 
-        f_hcm_136 = find_file("136", True)
-        f_pcvt_136 = find_file("136", False)
-        f_hcm_336 = find_file("336", True)
-        f_pcvt_336 = find_file("336", False)
+            # Step 3: Heuristic fallbacks by filename keywords
+            for f in excel_files:
+                p = os.path.join(folder_path, f)
+                f_upper = f.upper()
+                if not f_hcm_136 and "136" in f_upper and any(k in f_upper for k in ["HCM", "TCT", "KTN"]):
+                    f_hcm_136 = p
+                if not f_pcvt_136 and "136" in f_upper and any(k in f_upper for k in ["ĐIỆN LỰC", "PCVT", "DIEN LUC", "VŨNG TÀU", "VUNG TAU", "DL", "PC"]):
+                    f_pcvt_136 = p
+                if not f_hcm_336 and "336" in f_upper and any(k in f_upper for k in ["HCM", "TCT", "KTN"]):
+                    f_hcm_336 = p
+                if not f_pcvt_336 and "336" in f_upper and any(k in f_upper for k in ["ĐIỆN LỰC", "PCVT", "DIEN LUC", "VŨNG TÀU", "VUNG TAU", "DL", "PC"]):
+                    f_pcvt_336 = p
     
     hcm_136_acc, hcm_136_tx = parse_account_file(f_hcm_136)
     pcvt_136_acc, pcvt_136_tx = parse_account_file(f_pcvt_136)

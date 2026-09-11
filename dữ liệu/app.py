@@ -5,7 +5,7 @@ import sys
 
 # Import custom data processor & excel exporter
 sys.path.append(os.path.dirname(__file__))
-from data_processor import process_month_folder, analyze_discrepancy_causes, STANDARD_PAIRS, build_human_remark, format_currency
+from data_processor import process_month_folder, analyze_discrepancy_causes, STANDARD_PAIRS, build_human_remark, format_currency, smart_classify_file
 from excel_exporter import export_reconciliation_excel
 
 
@@ -109,75 +109,137 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+def get_folder_signature(folder_path):
+    if not folder_path or not os.path.exists(folder_path):
+        return "empty"
+    sig = []
+    try:
+        for f in os.listdir(folder_path):
+            if (f.lower().endswith('.xlsx') or f.lower().endswith('.xls')) and not f.startswith('~$'):
+                p = os.path.join(folder_path, f)
+                sig.append(f"{f}:{os.path.getmtime(p)}:{os.path.getsize(p)}")
+    except Exception:
+        pass
+    return "|".join(sorted(sig))
+
+@st.cache_data(show_spinner=False)
+def load_month_data(month_path, folder_sig):
+    return process_month_folder(month_path)
+
 # Sidebar - Month Selection & Data Management
-st.sidebar.header("⚙️ Chọn Kỳ Số Liệu")
+st.sidebar.header("⚙️ Nguồn & Kỳ Số Liệu")
+
+# Manage active source in session_state
+if "active_source" not in st.session_state:
+    st.session_state["active_source"] = "folder"
+if "uploaded_dict" not in st.session_state:
+    st.session_state["uploaded_dict"] = None
+if "selected_folder" not in st.session_state:
+    st.session_state["selected_folder"] = "Tháng 8"
 
 month_folders = []
 if os.path.exists(INPUT_DIR):
     month_folders = [d for d in os.listdir(INPUT_DIR) if os.path.isdir(os.path.join(INPUT_DIR, d))]
-month_folders.sort()
+
+def sort_key_month(name):
+    nums = re.findall(r'\d+', name)
+    return int(nums[0]) if nums else 999
+
+month_folders = sorted(month_folders, key=sort_key_month)
+
+default_idx = 0
+if st.session_state.get("selected_folder") in month_folders:
+    default_idx = month_folders.index(st.session_state["selected_folder"])
+elif month_folders:
+    default_idx = len(month_folders) - 1
 
 selected_folder = st.sidebar.selectbox(
     "📁 Chọn Thư Mục Kỳ Tháng:",
     options=month_folders if month_folders else ["tháng 7"],
-    index=0
+    index=default_idx
 )
-
+st.session_state["selected_folder"] = selected_folder
 target_month_path = os.path.join(INPUT_DIR, selected_folder)
 
 if st.sidebar.button("🔄 Làm Mới & Đọc Lại Dữ Liệu", type="primary", use_container_width=True):
     st.cache_data.clear()
+    st.session_state["active_source"] = "folder"
     st.rerun()
 
 st.sidebar.markdown("---")
-# Sidebar - File Upload Section for Overwriting or Adding New Month
-with st.sidebar.expander("📤 Tải Lên / Cập Nhật 4 File Số Liệu", expanded=False):
-    st.caption("Cho phép chép đè file mới hoặc tạo kỳ tháng mới trực tiếp từ giao diện web.")
-    upload_month_name = st.text_input("Tên kỳ tháng:", value=selected_folder)
-    
-    file_hcm_136 = st.file_uploader("1️⃣ TK 136 - HCM.xlsx", type=["xlsx"], key="u_hcm_136")
-    file_dl_136 = st.file_uploader("2️⃣ TK 136 - Điện lực.xlsx", type=["xlsx"], key="u_dl_136")
-    file_hcm_336 = st.file_uploader("3️⃣ TK 336 - HCM.xlsx", type=["xlsx"], key="u_hcm_336")
-    file_dl_336 = st.file_uploader("4️⃣ TK 336 - Điện lực.xlsx", type=["xlsx"], key="u_dl_336")
-    
-    if st.button("🚀 Ghi Lưu & Cập Nhật Chương Trình", type="primary", use_container_width=True):
-        if not upload_month_name.strip():
-            st.error("Vui lòng nhập tên kỳ tháng!")
-        else:
-            save_dir = os.path.join(INPUT_DIR, upload_month_name.strip())
-            os.makedirs(save_dir, exist_ok=True)
-            saved_count = 0
-            
-            if file_hcm_136:
-                with open(os.path.join(save_dir, "TK 136 - HCM.xlsx"), "wb") as f:
-                    f.write(file_hcm_136.getbuffer())
-                saved_count += 1
-                
-            if file_dl_136:
-                with open(os.path.join(save_dir, "TK 136 - Điện lực.xlsx"), "wb") as f:
-                    f.write(file_dl_136.getbuffer())
-                saved_count += 1
-                
-            if file_hcm_336:
-                with open(os.path.join(save_dir, "TK 336 - HCM.xlsx"), "wb") as f:
-                    f.write(file_hcm_336.getbuffer())
-                saved_count += 1
-                
-            if file_dl_336:
-                with open(os.path.join(save_dir, "TK 336 - Điện lực.xlsx"), "wb") as f:
-                    f.write(file_dl_336.getbuffer())
-                saved_count += 1
-                
-            if saved_count > 0:
-                st.cache_data.clear()
-                st.success(f"✅ Đã lưu {saved_count} file vào kỳ [{upload_month_name}] thành công!")
-                st.rerun()
-            else:
-                st.warning("Bạn chưa chọn file nào để tải lên.")
 
-@st.cache_data(show_spinner=False)
-def load_month_data(month_path):
-    return process_month_folder(month_path)
+# Smart Multi-File Uploader Section
+with st.sidebar.expander("📤 Tải Lên / Cập Nhật File Thông Minh", expanded=(st.session_state.get("active_source") == "uploaded")):
+    st.caption("✨ **Nhận diện tự động thông minh:** Kéo thả cả 4 file (hoặc từng file), định dạng `.xlsx` hoặc `.xls`. Chương trình tự động đọc nội dung để phân loại chính xác bất kể tên file được đặt như thế nào.")
+    
+    uploaded_files = st.file_uploader(
+        "Kéo thả 4 file số liệu vào đây:",
+        type=["xlsx", "xls"],
+        accept_multiple_files=True,
+        key="smart_uploader"
+    )
+    
+    detected_files = {}
+    role_options = {
+        "hcm_136": "1️⃣ TK 136 - HCM (Kế toán ngành)",
+        "dl_136": "2️⃣ TK 136 - Điện lực (Chi nhánh)",
+        "hcm_336": "3️⃣ TK 336 - HCM (Kế toán ngành)",
+        "dl_336": "4️⃣ TK 336 - Điện lực (Chi nhánh)"
+    }
+    
+    if uploaded_files:
+        st.markdown("##### 🔍 Kết quả nhận diện file:")
+        for uf in uploaded_files:
+            role, acc, ent, label = smart_classify_file(uf, uf.name)
+            default_role_idx = list(role_options.keys()).index(role) if role in role_options else 0
+            
+            chosen_role = st.selectbox(
+                f"File: `{uf.name}`",
+                options=list(role_options.keys()),
+                format_func=lambda k: role_options[k],
+                index=default_role_idx,
+                key=f"role_{uf.name}"
+            )
+            detected_files[chosen_role] = uf
+            
+        ready_count = len(detected_files)
+        if ready_count == 4:
+            st.success("🎉 Đã đủ 4/4 file cho cả 4 vai trò!")
+        else:
+            missing_roles = [role_options[r] for r in ["hcm_136", "dl_136", "hcm_336", "dl_336"] if r not in detected_files]
+            st.warning(f"Đã nhận diện {ready_count}/4 vai trò. Còn thiếu: {', '.join(missing_roles)}")
+            
+        if st.button("⚡ Đối Soát Trực Tiếp Dữ Liệu Vừa Tải", type="primary", use_container_width=True, disabled=(ready_count < 4)):
+            st.session_state["active_source"] = "uploaded"
+            st.session_state["uploaded_dict"] = detected_files
+            st.cache_data.clear()
+            st.rerun()
+            
+        st.markdown("---")
+        upload_month_name = st.text_input("Lưu vào kỳ tháng:", value=selected_folder)
+        if st.button("💾 Lưu Thành Kỳ Mới / Ghi Đè Kỳ Này", use_container_width=True, disabled=(ready_count == 0)):
+            if not upload_month_name.strip():
+                st.error("Vui lòng nhập tên kỳ tháng!")
+            else:
+                save_dir = os.path.join(INPUT_DIR, upload_month_name.strip())
+                os.makedirs(save_dir, exist_ok=True)
+                role_save_names = {
+                    "hcm_136": "TK 136 - HCM.xlsx",
+                    "dl_136": "TK 136 - Điện lực.xlsx",
+                    "hcm_336": "TK 336 - HCM.xlsx",
+                    "dl_336": "TK 336 - Điện lực.xlsx"
+                }
+                for r_key, u_file in detected_files.items():
+                    out_name = role_save_names.get(r_key, u_file.name)
+                    out_path = os.path.join(save_dir, out_name)
+                    with open(out_path, "wb") as f_out:
+                        f_out.write(u_file.getbuffer())
+                        
+                st.cache_data.clear()
+                st.session_state["selected_folder"] = upload_month_name.strip()
+                st.session_state["active_source"] = "folder"
+                st.success(f"✅ Đã lưu thành công vào kỳ [{upload_month_name}]!")
+                st.rerun()
 
 
 # Dialog Modal for Detail View
@@ -227,10 +289,27 @@ if hasattr(st, "dialog"):
         if st.button("❌ Đóng Màn Hình Chi Tiết", type="primary", use_container_width=True):
             st.rerun()
 
-if os.path.exists(target_month_path):
-    with st.spinner("Đang xử lý số liệu đối soát..."):
-        df_th, hcm_accs, pcvt_accs, all_txs = load_month_data(target_month_path)
+is_using_upload = (st.session_state.get("active_source") == "uploaded" and st.session_state.get("uploaded_dict") is not None)
+
+if is_using_upload:
+    st.info("⚡ Đang hiển thị kết quả **Đối Soát Trực Tiếp từ 4 File Vừa Tải Lên**.")
+    if st.button("⬅️ Quay lại xem dữ liệu theo kỳ thư mục", type="secondary"):
+        st.session_state["active_source"] = "folder"
+        st.rerun()
+    with st.spinner("Đang xử lý số liệu đối soát từ file tải lên..."):
+        df_th, hcm_accs, pcvt_accs, all_txs = process_month_folder(None, file_dict=st.session_state["uploaded_dict"])
         cross_matches, unmatched_by_pair = analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs)
+        current_period_name = "Kỳ Tải Lên Trực Tiếp"
+else:
+    folder_sig = get_folder_signature(target_month_path)
+    if os.path.exists(target_month_path):
+        with st.spinner(f"Đang xử lý số liệu đối soát kỳ [{selected_folder}]..."):
+            df_th, hcm_accs, pcvt_accs, all_txs = load_month_data(target_month_path, folder_sig)
+            cross_matches, unmatched_by_pair = analyze_discrepancy_causes(df_th, hcm_accs, pcvt_accs)
+            current_period_name = selected_folder
+    else:
+        st.error(f"Không tìm thấy thư mục: {target_month_path}")
+        st.stop()
         
     tot_no = df_th['Nợ'].sum()
     tot_co = df_th['Có'].sum()
@@ -485,12 +564,12 @@ if os.path.exists(target_month_path):
         st.subheader("📥 Xuất Báo Cáo Excel Kết Quả Đối Soát")
         st.write("Xuất file Excel chứa Sheet TONG_HOP và Sheet PHAN_TICH_CHENH_LECH giải trình chứng từ lệch.")
         
-        output_filename = f"Bao_Cao_Doi_Soat_136_336_{selected_folder.replace(' ', '_')}.xlsx"
+        output_filename = f"Bao_Cao_Doi_Soat_136_336_{current_period_name.replace(' ', '_')}.xlsx"
         full_out_path = os.path.join(OUTPUT_DIR, output_filename)
         
         if st.button("🚀 Bắt Đầu Xuất File Excel", type="primary"):
             with st.spinner("Đang xuất file Excel..."):
-                export_reconciliation_excel(df_th, full_out_path, period_text=selected_folder, cross_matches=cross_matches, unmatched_by_pair=unmatched_by_pair)
+                export_reconciliation_excel(df_th, full_out_path, period_text=current_period_name, cross_matches=cross_matches, unmatched_by_pair=unmatched_by_pair)
                 
             st.success(f"✅ Đã xuất báo cáo thành công!")
             st.code(full_out_path, language="text")
