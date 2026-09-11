@@ -1,5 +1,8 @@
 import openpyxl
-import xlrd
+try:
+    import xlrd
+except ImportError:
+    xlrd = None
 import pandas as pd
 import os
 import re

@@ -5,10 +5,43 @@ import sys
 import re
 import io
 
-# Import custom data processor & excel exporter
-sys.path.append(os.path.dirname(__file__))
-from data_processor import process_month_folder, analyze_discrepancy_causes, STANDARD_PAIRS, build_human_remark, format_currency, smart_classify_file
-from excel_exporter import export_reconciliation_excel
+# Ensure current and parent folders are at the front of sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+PARENT_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+if PARENT_DIR not in sys.path:
+    sys.path.insert(0, PARENT_DIR)
+
+try:
+    from data_processor import (
+        process_month_folder,
+        analyze_discrepancy_causes,
+        STANDARD_PAIRS,
+        build_human_remark,
+        format_currency,
+        smart_classify_file
+    )
+    from excel_exporter import export_reconciliation_excel
+except Exception as e:
+    import importlib.util
+    def _load_module(mod_name, file_name):
+        f_path = os.path.join(CURRENT_DIR, file_name)
+        spec = importlib.util.spec_from_file_location(mod_name, f_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    
+    _dp = _load_module("data_processor", "data_processor.py")
+    _ee = _load_module("excel_exporter", "excel_exporter.py")
+    
+    process_month_folder = _dp.process_month_folder
+    analyze_discrepancy_causes = _dp.analyze_discrepancy_causes
+    STANDARD_PAIRS = _dp.STANDARD_PAIRS
+    build_human_remark = _dp.build_human_remark
+    format_currency = _dp.format_currency
+    smart_classify_file = _dp.smart_classify_file
+    export_reconciliation_excel = _ee.export_reconciliation_excel
 
 
 # Streamlit Page Configuration
